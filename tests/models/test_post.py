@@ -25,6 +25,7 @@ async def test_blogpost_defaults(db):
     assert post.meta_title is None
     assert post.meta_description is None
     assert post.published_at is None
+    assert post.is_deleted is False
     assert isinstance(post.created_at, datetime)
     assert isinstance(post.updated_at, datetime)
     assert post.id is not None

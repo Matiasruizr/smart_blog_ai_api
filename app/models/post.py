@@ -22,6 +22,7 @@ class BlogPost(Document):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     published_at: Optional[datetime] = None
+    is_deleted: bool = False
 
     @before_event([Replace, SaveChanges])
     def update_timestamp(self) -> None:
