@@ -14,7 +14,10 @@ class BlogPost(Document):
     tags: list[str] = Field(default_factory=list)
     status: Literal["draft", "published"] = "draft"
     topic_id: Optional[PydanticObjectId] = None
-    linkedin_post_id: Optional[str] = None
+    linkedin_post_url: Optional[str] = None
+    cover_image_url: Optional[str] = None
+    meta_title: Optional[str] = None
+    meta_description: Optional[str] = None
     ai_model: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

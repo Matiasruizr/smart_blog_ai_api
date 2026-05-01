@@ -20,7 +20,10 @@ async def test_blogpost_defaults(db):
     assert post.status == "draft"
     assert post.tags == []
     assert post.topic_id is None
-    assert post.linkedin_post_id is None
+    assert post.linkedin_post_url is None
+    assert post.cover_image_url is None
+    assert post.meta_title is None
+    assert post.meta_description is None
     assert post.published_at is None
     assert isinstance(post.created_at, datetime)
     assert isinstance(post.updated_at, datetime)
@@ -39,7 +42,10 @@ async def test_blogpost_explicit_fields(db):
         tags=["python", "ai"],
         status="published",
         topic_id=topic_id,
-        linkedin_post_id="li:123",
+        linkedin_post_url="https://linkedin.com/posts/123",
+        cover_image_url="https://example.com/img.jpg",
+        meta_title="SEO Title",
+        meta_description="SEO description",
         ai_model="claude-sonnet-4-6",
         published_at=datetime.utcnow(),
     )
@@ -48,7 +54,9 @@ async def test_blogpost_explicit_fields(db):
     assert post.tags == ["python", "ai"]
     assert post.status == "published"
     assert post.topic_id == topic_id
-    assert post.linkedin_post_id == "li:123"
+    assert post.linkedin_post_url == "https://linkedin.com/posts/123"
+    assert post.cover_image_url == "https://example.com/img.jpg"
+    assert post.meta_title == "SEO Title"
     assert post.published_at is not None
 
 
