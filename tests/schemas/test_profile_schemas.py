@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from app.schemas.profile import ProfileResponse, ProfileUpdate
+from app.schemas.profile import LinkedInStatusResponse, ProfileResponse, ProfileUpdate
 
 
 def test_profile_update_defaults():
@@ -39,3 +39,22 @@ def test_profile_response_from_attributes():
     assert response.id == "prof123"
     assert response.location == "Madrid"
     assert response.skills == ["Python"]
+
+
+def test_linkedin_status_response_not_connected():
+    status = LinkedInStatusResponse(connected=False)
+    assert status.linkedin_id is None
+    assert status.token_expires_at is None
+    assert status.last_synced_at is None
+
+
+def test_linkedin_status_response_connected():
+    now = datetime.now(timezone.utc)
+    status = LinkedInStatusResponse(
+        connected=True,
+        linkedin_id="urn:li:person:123",
+        token_expires_at=now,
+        last_synced_at=now,
+    )
+    assert status.connected is True
+    assert status.linkedin_id == "urn:li:person:123"

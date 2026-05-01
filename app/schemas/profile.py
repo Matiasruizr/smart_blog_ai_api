@@ -24,3 +24,10 @@ class ProfileResponse(ProfileBase):
     id: str
     created_at: datetime
     updated_at: datetime
+
+
+class LinkedInStatusResponse(BaseModel):
+    connected: bool
+    linkedin_id: Optional[str] = None
+    token_expires_at: Optional[datetime] = None
+    last_synced_at: Optional[datetime] = None
