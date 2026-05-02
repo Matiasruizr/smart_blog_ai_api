@@ -2,7 +2,7 @@
 
 > RESTful API powering the Smart Blog AI platform. Connects the Next.js frontend, MongoDB Atlas, the AI content automation engine, and LinkedIn sync.
 
-![Python](https://img.shields.io/badge/Python-3.11+-1E293B?style=flat-square) ![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square) ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-00684A?style=flat-square) ![Status](https://img.shields.io/badge/Status-v1.0--alpha-7C3AED?style=flat-square)
+![Python](https://img.shields.io/badge/Python-3.13-1E293B?style=flat-square) ![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square) ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-00684A?style=flat-square) ![Status](https://img.shields.io/badge/Status-v1.0--alpha-7C3AED?style=flat-square)
 
 ---
 
@@ -24,16 +24,17 @@
 
 ## 1. Overview
 
-The Smart Blog AI backend is a RESTful API built with FastAPI and Python. It serves as the central nervous system of the platform, connecting the Next.js frontend, the MongoDB Atlas database, the AI content automation engine, and the LinkedIn sync module.
+The Smart Blog AI backend is a RESTful API built with FastAPI and Python 3.13. It serves as the central nervous system of the platform, connecting the Next.js frontend, MongoDB Atlas, the AI content automation engine, and the LinkedIn sync module.
 
 **What this API does:**
 
-- Manages blog posts — CRUD, publish workflow, draft/published states
+- Manages blog posts — CRUD, publish/unpublish workflow, soft-delete, page/size pagination
 - Exposes portfolio and profile data consumed by the Next.js frontend
-- Receives webhook callbacks from the automation engine to trigger post creation
-- Sends outbound emails (post published notifications, topic suggestion prompts)
-- Syncs professional data bidirectionally with the LinkedIn API
-- Exposes a trending topics endpoint used by the 48-hour automation scheduler
+- LinkedIn OAuth 2.0 flow — connect, sync profile data, share posts
+- AI-powered blog post generation via Claude (Anthropic SDK)
+- 48h automation cycle — scrape trending topics, generate post briefs, email owner, create posts
+- Outbound email notifications (SMTP / SendGrid) — _coming soon_
+- Webhook callbacks for the automation engine — _coming soon_
 
 ---
 
@@ -46,13 +47,13 @@ The Smart Blog AI backend is a RESTful API built with FastAPI and Python. It ser
 └──────────────────────┬──────────────────────────────────────┘
                        │  REST / JSON
 ┌──────────────────────▼──────────────────────────────────────┐
-│              API LAYER  (FastAPI / Python)                  │
+│              API LAYER  (FastAPI / Python 3.13)             │
 │   /posts  /profile  /linkedin  /automation  /webhooks       │
 └──────┬───────────────┬───────────────┬──────────────────────┘
        │               │               │
   ┌────▼────┐  ┌───────▼──────┐  ┌────▼────────────────────┐
   │ MongoDB │  │ LinkedIn API │  │ Automation Engine        │
-  │  Atlas  │  │  (OAuth 2.0) │  │ (APScheduler / SMTP)    │
+  │  Atlas  │  │  (OAuth 2.0) │  │ (Claude · APScheduler)  │
   └─────────┘  └──────────────┘  └─────────────────────────┘
 ```
 
@@ -61,14 +62,17 @@ The Smart Blog AI backend is a RESTful API built with FastAPI and Python. It ser
 | Layer | Technology | Notes |
 |---|---|---|
 | API Framework | FastAPI 0.110+ | Async, OpenAPI auto-docs, Pydantic v2 |
-| Language | Python 3.11+ | Type hints throughout |
-| Database | MongoDB Atlas | via motor (async driver) |
-| ODM | Beanie | Async ODM on top of motor |
-| Auth | JWT + OAuth 2.0 | JWT for API, OAuth for LinkedIn |
-| Email | SMTP / SendGrid | Configurable via env |
-| Scheduler | APScheduler | 48h content automation jobs |
-| AI Layer | Anthropic SDK | Claude for blog generation |
-| Deployment | Railway / Docker | Docker Compose for local dev |
+| Language | Python 3.13 | Type hints throughout |
+| Database | MongoDB Atlas | via `motor` async driver |
+| ODM | Beanie 1.26+ | Async ODM on top of motor |
+| Auth | JWT (`python-jose`) + OAuth 2.0 | JWT for API, OAuth for LinkedIn |
+| Password hashing | `passlib[bcrypt]` | Owner credentials |
+| HTTP client | `httpx` | LinkedIn API, image providers |
+| Email | SMTP / SendGrid | Configurable via env — _coming soon_ |
+| Scheduler | APScheduler | 48h content automation — _coming soon_ |
+| AI Layer | Anthropic SDK | Claude `claude-sonnet-4-6` for blog generation |
+| Config | `pydantic-settings` | All config from `.env` via `BaseSettings` |
+| Deployment | Railway / Docker | |
 
 ---
 
@@ -77,47 +81,66 @@ The Smart Blog AI backend is a RESTful API built with FastAPI and Python. It ser
 ```
 smart-blog-ai-api/
 ├── app/
-│   ├── main.py                  # FastAPI app entry point
-│   ├── config.py                # Settings from env (Pydantic BaseSettings)
-│   ├── database.py              # MongoDB Atlas connection (motor + Beanie)
+│   ├── main.py                  # FastAPI app, lifespan, CORS, router registration
+│   ├── config.py                # pydantic-settings BaseSettings + get_settings()
+│   ├── database.py              # init_db() — motor client + Beanie init
 │   │
-│   ├── models/                  # Beanie document models
-│   │   ├── post.py              # BlogPost document
-│   │   ├── profile.py           # Profile document
-│   │   └── topic.py             # TrendingTopic document
+│   ├── models/                  # Beanie Document subclasses (MongoDB)
+│   │   ├── post.py              # BlogPost — blog_posts collection
+│   │   ├── profile.py           # Profile + LinkedInCredentials — profile collection
+│   │   └── topic.py             # TrendingTopic — trending_topics collection
 │   │
-│   ├── routers/                 # FastAPI routers
-│   │   ├── posts.py             # /api/v1/posts
-│   │   ├── profile.py           # /api/v1/profile
-│   │   ├── linkedin.py          # /api/v1/linkedin
-│   │   ├── automation.py        # /api/v1/automation
-│   │   └── webhooks.py          # /api/v1/webhooks
+│   ├── schemas/                 # Pydantic request/response shapes (not DB models)
+│   │   ├── post.py              # PostBase, PostCreate, PostUpdate, PostResponse
+│   │   ├── profile.py           # ProfileBase, ProfileUpdate, ProfileResponse,
+│   │   │                        # LinkedInStatusResponse, TokenStatusResponse, ShareResponse
+│   │   └── automation.py        # GenerateRequest, TrendingTopicResponse, SchedulerStatusResponse
 │   │
-│   ├── services/                # Business logic
-│   │   ├── ai_service.py        # Claude API calls
-│   │   ├── email_service.py     # SMTP / SendGrid
-│   │   ├── linkedin_service.py  # LinkedIn OAuth + sync
-│   │   ├── trending_service.py  # HN + GitHub trending scraper
-│   │   └── scheduler.py        # APScheduler job definitions
+│   ├── routers/                 # HTTP layer only — delegate to services
+│   │   ├── post.py              # /api/v1/posts  ✅
+│   │   ├── profile.py           # /api/v1/profile  ✅
+│   │   ├── linkedin.py          # /api/v1/linkedin  ✅
+│   │   ├── automation.py        # /api/v1/automation  🔜
+│   │   └── webhooks.py          # /api/v1/webhooks  🔜
 │   │
-│   ├── schemas/                 # Pydantic request/response schemas
-│   │   ├── post.py
-│   │   ├── profile.py
-│   │   └── automation.py
+│   ├── services/                # All business logic — no FastAPI imports
+│   │   ├── post_service.py      # Post CRUD + publish/unpublish/soft-delete  ✅
+│   │   ├── profile_service.py   # Profile upsert + LinkedIn credentials  ✅
+│   │   ├── linkedin_service.py  # OAuth exchange, profile sync, post sharing  ✅
+│   │   ├── ai_service.py        # Claude calls + cover image fetch  🔜
+│   │   ├── email_service.py     # SMTP / SendGrid  🔜
+│   │   ├── trending_service.py  # HN + GitHub trending scraper  🔜
+│   │   └── scheduler.py         # APScheduler 48h job definitions  🔜
 │   │
 │   └── core/
-│       ├── auth.py              # JWT creation & verification
-│       ├── security.py          # Password hashing, token utils
-│       └── dependencies.py      # FastAPI dependency injection
+│       ├── auth.py              # create_access_token / decode_access_token (python-jose)
+│       ├── security.py          # hash_password / verify_password (passlib bcrypt)
+│       └── dependencies.py      # get_current_user + CurrentUser type alias
 │
 ├── tests/
-│   ├── test_posts.py
-│   ├── test_automation.py
-│   └── test_linkedin.py
+│   ├── conftest.py              # pytest-asyncio fixture — Beanie + test MongoDB
+│   ├── pytest.ini               # asyncio_mode = auto
+│   ├── test_config.py
+│   ├── test_auth.py
+│   ├── models/
+│   │   ├── test_post.py
+│   │   ├── test_profile.py
+│   │   └── test_topic.py
+│   ├── schemas/
+│   │   ├── test_post_schemas.py
+│   │   ├── test_profile_schemas.py
+│   │   └── test_automation_schemas.py
+│   └── routers/
+│       ├── test_posts.py
+│       ├── test_profile.py
+│       └── test_linkedin.py
+│
+├── docs/
+│   └── superpowers/
+│       ├── specs/               # Approved design documents
+│       └── plans/               # Implementation plans
 │
 ├── .env.example
-├── Dockerfile
-├── docker-compose.yml
 ├── requirements.txt
 └── README.md
 ```
@@ -128,11 +151,10 @@ smart-blog-ai-api/
 
 ### Prerequisites
 
-- Python 3.11+
-- MongoDB Atlas cluster (free tier works for development)
-- Anthropic API key (Claude)
-- LinkedIn Developer App with OAuth 2.0 credentials
-- SMTP credentials or SendGrid API key
+- Python 3.13
+- MongoDB Atlas cluster (free tier works for development) or local MongoDB
+- Anthropic API key (Claude) — for AI generation
+- LinkedIn Developer App — for LinkedIn integration (optional for local dev)
 
 ### Local setup
 
@@ -151,15 +173,9 @@ cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-Interactive API docs will be at `http://localhost:8000/docs` (Swagger UI) and `http://localhost:8000/redoc`.
+Interactive API docs: `http://localhost:8000/docs` (Swagger UI) · `http://localhost:8000/redoc`
 
-### Docker Compose (recommended)
-
-```bash
-docker-compose up --build
-```
-
-The MongoDB connection points to Atlas (not a local container) — set your Atlas URI in `.env` first.
+Health check: `GET /health`
 
 ---
 
@@ -169,57 +185,69 @@ All configuration is loaded from `.env` via Pydantic `BaseSettings`. Never commi
 
 ### Core
 
-| Variable | Description | Required |
-|---|---|---|
-| `APP_ENV` | Environment: `development` / `production` | Yes |
-| `SECRET_KEY` | Secret for JWT signing. Use a long random string. | Yes |
-| `ALLOWED_ORIGINS` | Comma-separated CORS origins (your Next.js URL) | Yes |
-| `API_V1_PREFIX` | API prefix, default: `/api/v1` | No |
+| Variable | Description | Default | Required |
+|---|---|---|---|
+| `APP_ENV` | `development` / `production` | `development` | No |
+| `SECRET_KEY` | JWT signing secret — minimum 64 chars | — | **Yes** |
+| `ALLOWED_ORIGINS` | Comma-separated CORS origins | `http://localhost:3000` | No |
+| `API_V1_PREFIX` | API prefix | `/api/v1` | No |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | JWT token lifetime | `1440` (24h) | No |
+| `FRONTEND_URL` | Frontend URL used for OAuth redirects | `http://localhost:3000` | No |
+| `BLOG_URL` | Public blog URL used when sharing posts to LinkedIn | `http://localhost:3000` | No |
 
 ### Database
 
 | Variable | Description | Required |
 |---|---|---|
-| `MONGODB_URI` | Full MongoDB Atlas connection string | Yes |
-| `MONGODB_DB_NAME` | Database name (e.g. `smart_blog_ai`) | Yes |
+| `MONGODB_URI` | Full MongoDB connection string | **Yes** |
+| `MONGODB_DB_NAME` | Database name (e.g. `smart_blog_ai`) | **Yes** |
 
 ### AI (Anthropic)
 
+| Variable | Description | Default | Required |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | Anthropic Claude API key | — | **Yes** (for generation) |
+| `AI_MODEL` | Claude model ID | `claude-sonnet-4-6` | No |
+| `AI_MAX_TOKENS` | Max tokens per generation | `4096` | No |
+
+### Image providers (for AI-generated cover images)
+
+| Variable | Description | Default | Required |
+|---|---|---|---|
+| `UNSPLASH_ACCESS_KEY` | Unsplash API key (free tier: 50 req/hr) | `""` | No |
+| `PEXELS_API_KEY` | Pexels API key (free tier: 200 req/hr) | `""` | No |
+
+> The service tries Unsplash first, falls back to Pexels. Posts are created without a cover image if both keys are missing.
+
+### LinkedIn
+
+| Variable | Description | Default | Required |
+|---|---|---|---|
+| `LINKEDIN_CLIENT_ID` | LinkedIn app Client ID | `""` | No |
+| `LINKEDIN_CLIENT_SECRET` | LinkedIn app Client Secret | `""` | No |
+| `LINKEDIN_REDIRECT_URI` | OAuth callback URL | `http://localhost:8000/api/v1/linkedin/callback` | No |
+| `LINKEDIN_SCOPE` | OAuth scopes | `r_liteprofile w_member_social` | No |
+
+### Email _(coming soon)_
+
 | Variable | Description | Required |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Your Anthropic Claude API key | Yes |
-| `AI_MODEL` | Model to use, default: `claude-opus-4-5` | No |
-| `AI_MAX_TOKENS` | Max tokens per generation, default: `4096` | No |
-
-### Email
-
-| Variable | Description | Required |
-|---|---|---|
-| `EMAIL_PROVIDER` | `smtp` or `sendgrid` | Yes |
+| `EMAIL_PROVIDER` | `smtp` or `sendgrid` | When email is enabled |
 | `SMTP_HOST` | SMTP server host | If smtp |
 | `SMTP_PORT` | SMTP port (587 for TLS) | If smtp |
 | `SMTP_USER` | SMTP username | If smtp |
 | `SMTP_PASSWORD` | SMTP password | If smtp |
 | `SENDGRID_API_KEY` | SendGrid API key | If sendgrid |
-| `EMAIL_FROM` | Sender address for all outbound emails | Yes |
-| `EMAIL_TO_OWNER` | Your personal email to receive automation emails | Yes |
+| `EMAIL_FROM` | Sender address | When email is enabled |
+| `EMAIL_TO_OWNER` | Owner's email for automation notifications | When email is enabled |
 
-### LinkedIn
+### Automation Scheduler _(coming soon)_
 
-| Variable | Description | Required |
+| Variable | Description | Default |
 |---|---|---|
-| `LINKEDIN_CLIENT_ID` | LinkedIn app Client ID | Yes |
-| `LINKEDIN_CLIENT_SECRET` | LinkedIn app Client Secret | Yes |
-| `LINKEDIN_REDIRECT_URI` | OAuth callback URL | Yes |
-| `LINKEDIN_SCOPE` | OAuth scopes, e.g.: `r_liteprofile w_member_social` | Yes |
-
-### Automation Scheduler
-
-| Variable | Description | Required |
-|---|---|---|
-| `SCHEDULER_ENABLED` | Enable the background scheduler (`true`/`false`) | No |
-| `AUTOMATION_INTERVAL_HOURS` | Hours between automation runs, default: `48` | No |
-| `TRENDING_SOURCES` | Comma-separated: `hackernews,github,rss` | No |
+| `SCHEDULER_ENABLED` | Enable the background scheduler | `true` |
+| `AUTOMATION_INTERVAL_HOURS` | Hours between automation runs | `48` |
+| `TRENDING_SOURCES` | Comma-separated: `hackernews,github` | `hackernews,github` |
 
 ---
 
@@ -227,89 +255,90 @@ All configuration is loaded from `.env` via Pydantic `BaseSettings`. Never commi
 
 All routes are prefixed with `/api/v1`. Protected routes require `Authorization: Bearer <token>`.
 
-### Authentication
+### Authentication _(login endpoint coming soon)_
 
-| Method | Endpoint | Description | Auth |
-|---|---|---|---|
-| `POST` | `/auth/login` | Obtain a JWT access token | No |
-| `POST` | `/auth/refresh` | Refresh an expired JWT | No |
+JWT verification is implemented. The login endpoint will be added with the auth router.
 
-**Login request body:**
-
-```json
-{
-  "username": "your-username",
-  "password": "your-password"
-}
-```
+| Method | Endpoint | Description | Auth | Status |
+|---|---|---|---|---|
+| `POST` | `/auth/login` | Obtain a JWT access token | No | 🔜 |
 
 ---
 
-### Blog Posts
+### Blog Posts ✅
 
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| `GET` | `/posts` | List all published posts (paginated) | No |
-| `GET` | `/posts/{slug}` | Get a single post by slug | No |
-| `POST` | `/posts` | Create a new blog post (draft) | Yes |
-| `PUT` | `/posts/{id}` | Update a post by ID | Yes |
-| `PATCH` | `/posts/{id}/publish` | Publish a draft post | Yes |
-| `PATCH` | `/posts/{id}/unpublish` | Revert a post to draft | Yes |
+| `GET` | `/posts` | List published posts | No |
+| `GET` | `/posts/drafts` | List draft posts | Yes |
+| `GET` | `/posts/{slug}` | Get a published post by slug | No |
+| `POST` | `/posts` | Create a new draft post | Yes |
+| `PUT` | `/posts/{id}` | Update a post | Yes |
+| `PATCH` | `/posts/{id}/publish` | Publish a draft | Yes |
+| `PATCH` | `/posts/{id}/unpublish` | Revert to draft | Yes |
 | `DELETE` | `/posts/{id}` | Soft-delete a post | Yes |
-| `GET` | `/posts/drafts` | List all draft posts | Yes |
 
-**Post object schema (abbreviated):**
+**Pagination** (`GET /posts`, `GET /posts/drafts`): `?page=1&size=10`
+
+**Post response schema:**
 
 ```json
 {
+  "id": "string",
   "title": "string",
   "slug": "string",
   "content": "string",
   "excerpt": "string",
   "tags": ["string"],
   "status": "draft | published",
-  "cover_image_url": "string",
-  "published_at": "ISO 8601 datetime | null",
+  "ai_model": "string",
+  "cover_image_url": "string | null",
+  "meta_title": "string | null",
+  "meta_description": "string | null",
+  "topic_id": "string | null",
   "linkedin_post_url": "string | null",
-  "meta_title": "string",
-  "meta_description": "string"
+  "published_at": "ISO 8601 | null",
+  "created_at": "ISO 8601",
+  "updated_at": "ISO 8601"
 }
 ```
 
 ---
 
-### Profile
+### Profile ✅
+
+Singleton — one profile per deployment. `PUT /profile` uses upsert semantics.
 
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| `GET` | `/profile` | Get public profile data | No |
-| `PUT` | `/profile` | Update profile (bio, skills, links) | Yes |
-| `GET` | `/profile/linkedin-status` | Check last LinkedIn sync status | Yes |
+| `GET` | `/profile` | Get public profile | No |
+| `PUT` | `/profile` | Create or update profile | Yes |
+| `GET` | `/profile/linkedin-status` | LinkedIn connection status | Yes |
 
 ---
 
-### LinkedIn Sync
+### LinkedIn ✅
 
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| `GET` | `/linkedin/auth` | Initiate LinkedIn OAuth 2.0 flow | Yes |
-| `GET` | `/linkedin/callback` | OAuth callback — receives code from LinkedIn | No |
-| `POST` | `/linkedin/sync` | Manually trigger a LinkedIn profile sync | Yes |
+| `GET` | `/linkedin/auth` | Initiate OAuth 2.0 flow | Yes |
+| `GET` | `/linkedin/callback` | OAuth callback (redirect from LinkedIn) | No |
+| `POST` | `/linkedin/sync` | Sync name + headline from LinkedIn | Yes |
 | `POST` | `/linkedin/share/{post_id}` | Share a published post to LinkedIn | Yes |
-| `GET` | `/linkedin/token-status` | Check if LinkedIn token is valid/expired | Yes |
+| `GET` | `/linkedin/token-status` | Check token validity and expiry | Yes |
 
 ---
 
-### Automation
+### Automation 🔜
 
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| `GET` | `/automation/trending` | Fetch today's trending topic suggestions | Yes |
-| `POST` | `/automation/generate` | Trigger blog post generation from a brief | Yes |
-| `GET` | `/automation/status` | Check scheduler status and next run time | Yes |
-| `POST` | `/automation/run-now` | Force-trigger the 48h automation cycle immediately | Yes |
+| `GET` | `/automation/trending` | List pending trending topic suggestions | Yes |
+| `POST` | `/automation/generate` | Generate a blog post from a brief via Claude | Yes |
+| `GET` | `/automation/status` | Scheduler status and next run time | Yes |
+| `POST` | `/automation/run-now` | Force-trigger the automation cycle | Yes |
 
-**Generate post request body:**
+**Generate request body:**
 
 ```json
 {
@@ -322,60 +351,64 @@ All routes are prefixed with `/api/v1`. Protected routes require `Authorization:
 
 ---
 
-### Webhooks
+### Webhooks 🔜
 
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| `POST` | `/webhooks/post-published` | Called internally when a post is published — triggers notification email | Yes |
-| `POST` | `/webhooks/brief-submitted` | Called when owner approves a brief from the topic email | Yes |
+| `POST` | `/webhooks/brief-submitted` | Owner approved a brief — triggers post generation | Yes |
+| `POST` | `/webhooks/post-published` | Post published — triggers notification email | Yes |
 
 ---
 
 ## 7. Automation Flow
 
-The 48-hour content cycle:
+The 48-hour content cycle _(scheduler and email coming soon — `POST /automation/generate` is available now for manual generation)_:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Every 48 hours (APScheduler)                               │
+│  Every 48 hours (APScheduler)                🔜             │
 │                                                             │
 │  1. trending_service.py                                     │
-│     → scrapes Hacker News API                               │
-│     → scrapes GitHub Trending                               │
-│     → optionally fetches configured RSS feeds               │
+│     → scrapes Hacker News API + GitHub Trending             │
 │     → sends list to Claude for ranking & summarization      │
+│     → saves TrendingTopic documents in MongoDB              │
 │                                                             │
 │  2. email_service.py                                        │
-│     → sends YOU an email with 3-5 topic suggestions         │
-│        + a proposed brief for each                          │
-│     → email contains reply instructions (choose + approve)  │
+│     → sends owner email with 3-5 topic suggestions         │
+│       + proposed brief for each                             │
 │                                                             │
-│  3. You reply (or use the web UI) to approve one brief      │
-│     → POST /api/v1/webhooks/brief-submitted is called       │
+│  3. Owner approves one brief (web UI or email reply)        │
+│     → POST /api/v1/webhooks/brief-submitted                 │
 │                                                             │
-│  4. ai_service.py                                           │
-│     → sends subject + brief to Claude                       │
-│     → receives full Markdown blog post                      │
-│     → saves as draft BlogPost in MongoDB                    │
+│  4. ai_service.py                            🔜             │
+│     → calls Claude with subject + brief                     │
+│     → receives JSON: title, excerpt, content, image term    │
+│     → fetches cover image (Unsplash → Pexels fallback)      │
+│     → saves draft BlogPost in MongoDB                       │
 │                                                             │
 │  5. Optional: auto_publish = true                           │
-│     → publishes post, fires /webhooks/post-published        │
-│     → sends YOU a notification email with excerpt + link    │
-│     → optionally shares to LinkedIn                         │
+│     → publishes post + shares to LinkedIn                   │
 └─────────────────────────────────────────────────────────────┘
+```
+
+**Manual generation** (available now):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/automation/generate \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"subject": "...", "brief": "...", "tags": [], "auto_publish": false}'
 ```
 
 ---
 
 ## 8. Authentication & Security
 
-- The API uses **JWT (JSON Web Tokens)** for all owner/admin endpoints.
-- Tokens are issued via `POST /api/v1/auth/login` and expire after 24h by default.
-- LinkedIn integration uses **OAuth 2.0 Authorization Code flow** — tokens are stored encrypted in MongoDB.
-- All endpoints that write data or trigger automation require a valid JWT.
-- Public endpoints (`GET /posts`, `GET /profile`) are intentionally unauthenticated for SEO and frontend consumption.
-
-Include the token in every protected request:
+- All owner/admin endpoints require a **JWT Bearer token** in the `Authorization` header.
+- JWT signing uses `python-jose` HS256 with `SECRET_KEY`. Default expiry: 24h (`ACCESS_TOKEN_EXPIRE_MINUTES`).
+- Password hashing uses `passlib[bcrypt]`.
+- LinkedIn integration uses **OAuth 2.0 Authorization Code** — tokens stored in the `Profile` document (encrypted at the application level in production).
+- Public endpoints (`GET /posts`, `GET /profile`) are intentionally unauthenticated for SEO and frontend use.
 
 ```
 Authorization: Bearer <your-token>
@@ -387,11 +420,11 @@ Authorization: Bearer <your-token>
 
 ### Railway (recommended)
 
-1. Connect your GitHub repository to a new Railway project.
-2. Add all environment variables via the Railway dashboard (Variables tab).
+1. Connect your GitHub repo to a new Railway project.
+2. Add all required environment variables via the Railway dashboard (Variables tab).
 3. Railway auto-detects the Dockerfile and builds on push to `main`.
 4. Set a custom domain pointing to your Railway service URL.
-5. Configure a health check on `GET /api/v1/health`.
+5. Health check: `GET /health`
 
 ### Docker
 
@@ -402,46 +435,50 @@ docker run -p 8000:8000 --env-file .env smart-blog-api
 
 ### Production checklist
 
-- Set `APP_ENV=production`
-- Set a strong, random `SECRET_KEY` (minimum 64 chars)
-- Restrict `ALLOWED_ORIGINS` to your actual frontend domain only
-- Enable MongoDB Atlas IP whitelisting for your server IP
-- Rotate LinkedIn OAuth tokens before they expire (60-day validity)
-- Monitor scheduler health via `GET /api/v1/automation/status`
+- `APP_ENV=production`
+- `SECRET_KEY` — strong random string, minimum 64 chars
+- `ALLOWED_ORIGINS` — restricted to your actual frontend domain
+- MongoDB Atlas IP allowlist configured for your server
+- LinkedIn OAuth tokens rotate every 60 days — monitor via `GET /api/v1/linkedin/token-status`
 
 ---
 
 ## 10. Running Tests
 
-```bash
-# Install test dependencies
-pip install pytest pytest-asyncio httpx
+Requires a local MongoDB instance on `mongodb://localhost:27017`. Tests use the `test_smart_blog_ai` database, which is dropped after each test run.
 
-# Run all tests
+```bash
+source .venv/bin/activate
+
+# All tests
 pytest
 
-# With coverage report
+# With coverage
 pytest --cov=app --cov-report=term-missing
-```
 
-Tests use a separate test database configured via `MONGODB_DB_NAME=test_smart_blog_ai`. LinkedIn and email services are mocked in tests.
+# Single test file
+pytest tests/routers/test_posts.py -v
+
+# Single test
+pytest tests/models/test_post.py::test_blogpost_defaults -v
+```
 
 ---
 
 ## 11. Contributing & Conventions
 
 - **Branch naming:** `feature/short-description`, `fix/short-description`
-- **Commits:** follow [Conventional Commits](https://www.conventionalcommits.org/) — `feat:`, `fix:`, `chore:`, `docs:`
-- All new endpoints must include Pydantic schemas for both request and response
-- Type hints are required on all functions
-- Run `black` and `ruff` before committing
+- **Commits:** [Conventional Commits](https://www.conventionalcommits.org/) — `feat:`, `fix:`, `chore:`, `docs:`
+- All endpoints need Pydantic schemas for both request and response (in `schemas/`, never inline)
+- Models (`app/models/`) are Beanie `Document`s; schemas (`app/schemas/`) are plain Pydantic — never mix
+- Type hints required on all functions
+- Run `black` + `ruff` before committing
 
 ```bash
-pip install black ruff
 black app/
 ruff check app/
 ```
 
 ---
 
-*Smart Blog AI · FastAPI Backend · Built with Python, FastAPI, MongoDB Atlas & Claude*
+*Smart Blog AI · FastAPI Backend · Python 3.13 · Built with FastAPI, MongoDB Atlas & Claude*
