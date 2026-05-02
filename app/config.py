@@ -17,8 +17,13 @@ class Settings(BaseSettings):
     mongodb_uri: str
     mongodb_db_name: str
 
+    anthropic_api_key: str = ""
     ai_model: str = "claude-sonnet-4-6"
+    ai_max_tokens: int = 4096
     access_token_expire_minutes: int = 1440
+
+    unsplash_access_key: str = ""
+    pexels_api_key: str = ""
 
     linkedin_client_id: str = ""
     linkedin_client_secret: str = ""
@@ -26,6 +31,9 @@ class Settings(BaseSettings):
     linkedin_scope: str = "r_liteprofile w_member_social"
     frontend_url: str = "http://localhost:3000"
     blog_url: str = "http://localhost:3000"
+
+    scheduler_enabled: bool = True
+    automation_interval_hours: int = 48
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
