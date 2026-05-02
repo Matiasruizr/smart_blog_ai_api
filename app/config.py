@@ -31,9 +31,19 @@ class Settings(BaseSettings):
     linkedin_scope: str = "r_liteprofile w_member_social"
     frontend_url: str = "http://localhost:3000"
     blog_url: str = "http://localhost:3000"
+    api_url: str = "http://localhost:8000"
 
     scheduler_enabled: bool = True
     automation_interval_hours: int = 48
+
+    email_provider: str = "smtp"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    sendgrid_api_key: str = ""
+    email_from: str = ""
+    email_to_owner: str = ""
 
     @field_validator("allowed_origins", mode="before")
     @classmethod

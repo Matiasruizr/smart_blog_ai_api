@@ -15,7 +15,18 @@ from app.routers.profile import router as profile_router
 async def lifespan(app: FastAPI):
     settings = get_settings()
     await init_db(settings)
+
+    if settings.scheduler_enabled:
+        from app.services.scheduler import create_scheduler
+
+        scheduler = create_scheduler(settings)
+        scheduler.start()
+        app.state.scheduler = scheduler
+
     yield
+
+    if hasattr(app.state, "scheduler"):
+        app.state.scheduler.shutdown(wait=False)
 
 
 def create_app() -> FastAPI:
