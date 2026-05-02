@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     ai_model: str = "claude-sonnet-4-6"
     access_token_expire_minutes: int = 1440
 
+    linkedin_client_id: str = ""
+    linkedin_client_secret: str = ""
+    linkedin_redirect_uri: str = "http://localhost:8000/api/v1/linkedin/callback"
+    linkedin_scope: str = "r_liteprofile w_member_social"
+    frontend_url: str = "http://localhost:3000"
+    blog_url: str = "http://localhost:3000"
+
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def parse_origins(cls, v: object) -> object:

@@ -1,6 +1,12 @@
 from datetime import datetime, timezone
 
-from app.schemas.profile import LinkedInStatusResponse, ProfileResponse, ProfileUpdate
+from app.schemas.profile import (
+    LinkedInStatusResponse,
+    ProfileResponse,
+    ProfileUpdate,
+    ShareResponse,
+    TokenStatusResponse,
+)
 
 
 def test_profile_update_defaults():
@@ -58,3 +64,21 @@ def test_linkedin_status_response_connected():
     )
     assert status.connected is True
     assert status.linkedin_id == "urn:li:person:123"
+
+
+def test_token_status_invalid():
+    s = TokenStatusResponse(valid=False)
+    assert s.expires_at is None
+    assert s.expires_in_days is None
+
+
+def test_token_status_valid():
+    exp = datetime.now(timezone.utc)
+    s = TokenStatusResponse(valid=True, expires_at=exp, expires_in_days=30)
+    assert s.valid is True
+    assert s.expires_in_days == 30
+
+
+def test_share_response():
+    r = ShareResponse(linkedin_post_url="https://linkedin.com/feed/update/urn:li:ugcPost:123")
+    assert "linkedin.com" in r.linkedin_post_url

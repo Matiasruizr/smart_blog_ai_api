@@ -1,4 +1,4 @@
-from app.models.profile import Profile
+from app.models.profile import LinkedInCredentials, Profile
 from app.schemas.profile import LinkedInStatusResponse, ProfileUpdate
 
 
@@ -27,6 +27,17 @@ async def upsert(data: ProfileUpdate) -> Profile:
         profile.location = data.location
         profile.skills = data.skills
         profile.links = data.links
+        await profile.replace()
+    return profile
+
+
+async def upsert_credentials(credentials: LinkedInCredentials) -> Profile:
+    profile = await Profile.find_one()
+    if profile is None:
+        profile = Profile(name="", headline="", bio="", linkedin=credentials)
+        await profile.insert()
+    else:
+        profile.linkedin = credentials
         await profile.replace()
     return profile
 

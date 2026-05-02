@@ -31,3 +31,13 @@ class LinkedInStatusResponse(BaseModel):
     linkedin_id: Optional[str] = None
     token_expires_at: Optional[datetime] = None
     last_synced_at: Optional[datetime] = None
+
+
+class TokenStatusResponse(BaseModel):
+    valid: bool
+    expires_at: Optional[datetime] = None
+    expires_in_days: Optional[int] = None
+
+
+class ShareResponse(BaseModel):
+    linkedin_post_url: str
