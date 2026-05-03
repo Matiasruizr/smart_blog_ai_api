@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://localhost:3000"]
     api_v1_prefix: str = "/api/v1"
 
+    owner_username: str = "admin"
+    owner_password_hash: str = ""
+
     mongodb_uri: str
     mongodb_db_name: str
 
