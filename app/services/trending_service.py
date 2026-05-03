@@ -192,20 +192,19 @@ async def rank_and_save(items: list[dict], settings: Settings) -> list[TrendingT
     import anthropic
 
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-    message = await client.messages.create(
-        model=settings.ai_model,
-        max_tokens=1024,
-        system=_RANKING_SYSTEM,
-        messages=[
-            {"role": "user", "content": json.dumps(items, ensure_ascii=False)},
-        ],
-    )
-
-    raw = message.content[0].text if message.content else ""
     try:
+        message = await client.messages.create(
+            model=settings.ai_model,
+            max_tokens=1024,
+            system=_RANKING_SYSTEM,
+            messages=[
+                {"role": "user", "content": json.dumps(items, ensure_ascii=False)},
+            ],
+        )
+        raw = message.content[0].text if message.content else ""
         ranked = _parse_ranked_topics(raw)
-    except (json.JSONDecodeError, ValueError, TypeError, AttributeError) as exc:
-        logger.warning("AI ranking parse failed (%s). Falling back to deterministic ranking.", exc)
+    except Exception as exc:
+        logger.warning("AI ranking failed (%s). Falling back to deterministic ranking.", exc)
         ranked = _fallback_rank_items(items)
 
     topics: list[TrendingTopic] = []

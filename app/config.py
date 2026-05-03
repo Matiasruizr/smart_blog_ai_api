@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     sendgrid_api_key: str = ""
+    resend_api_key: str = ""
     email_from: str = ""
     email_to_owner: str = ""
 

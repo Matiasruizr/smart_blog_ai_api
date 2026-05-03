@@ -33,9 +33,23 @@ def _send_via_sendgrid(to: str, subject: str, html_body: str, settings: Settings
     SendGridAPIClient(settings.sendgrid_api_key).send(message)
 
 
+def _send_via_resend(to: str, subject: str, html_body: str, settings: Settings) -> None:
+    import resend
+
+    resend.api_key = settings.resend_api_key
+    resend.Emails.send({
+        "from": settings.email_from,
+        "to": to,
+        "subject": subject,
+        "html": html_body,
+    })
+
+
 def _dispatch(to: str, subject: str, html_body: str, settings: Settings) -> None:
     if settings.email_provider == "sendgrid":
         _send_via_sendgrid(to, subject, html_body, settings)
+    elif settings.email_provider == "resend":
+        _send_via_resend(to, subject, html_body, settings)
     else:
         _send_via_smtp(to, subject, html_body, settings)
 
