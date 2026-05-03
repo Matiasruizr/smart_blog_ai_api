@@ -9,6 +9,7 @@ from app.routers.automation import router as automation_router
 from app.routers.linkedin import router as linkedin_router
 from app.routers.post import router as post_router
 from app.routers.profile import router as profile_router
+from app.routers.webhooks import router as webhooks_router
 
 
 @asynccontextmanager
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(profile_router, prefix=settings.api_v1_prefix)
     app.include_router(linkedin_router, prefix=settings.api_v1_prefix)
     app.include_router(automation_router, prefix=settings.api_v1_prefix)
+    app.include_router(webhooks_router, prefix=settings.api_v1_prefix)
 
     @app.get("/health")
     async def health() -> dict:

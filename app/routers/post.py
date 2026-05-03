@@ -1,10 +1,10 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from pymongo.errors import DuplicateKeyError
 
 from app.config import SettingsDep
 from app.core.dependencies import CurrentUser
 from app.schemas.post import PostCreate, PostResponse, PostUpdate
-from app.services import post_service
+from app.services import email_service, post_service
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -63,11 +63,17 @@ async def update_post(
 
 
 @router.patch("/{post_id}/publish", response_model=PostResponse)
-async def publish_post(post_id: str, _: CurrentUser) -> PostResponse:
+async def publish_post(
+    post_id: str,
+    _: CurrentUser,
+    background_tasks: BackgroundTasks,
+    settings: SettingsDep,
+) -> PostResponse:
     post = await post_service.get_by_id(post_id)
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
     post = await post_service.publish(post)
+    background_tasks.add_task(email_service.send_post_published, post, settings)
     return PostResponse.model_validate(post)
 
 

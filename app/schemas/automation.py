@@ -11,6 +11,14 @@ class GenerateRequest(BaseModel):
     auto_publish: bool = False
 
 
+class BriefSubmittedRequest(BaseModel):
+    topic_id: str
+
+
+class PostPublishedRequest(BaseModel):
+    post_id: str
+
+
 class TrendingTopicResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
