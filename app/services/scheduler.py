@@ -18,7 +18,7 @@ async def run_automation_cycle(settings: Settings) -> None:
         email_service.send_topic_suggestions(topics, settings)
         logger.info("Topic suggestion email sent to %s", settings.email_to_owner)
     except Exception as exc:
-        logger.error("Automation cycle failed: %s", exc)
+        logger.exception("Automation cycle failed: %s", exc)
 
 
 def create_scheduler(settings: Settings) -> AsyncIOScheduler:

@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 import httpx
 from bs4 import BeautifulSoup
@@ -20,6 +21,116 @@ _RANKING_SYSTEM = (
     "brief (2-3 sentence writing brief as a string), "
     "source (either 'hackernews' or 'github' as a string)."
 )
+
+
+def _extract_json_payload(raw: str) -> str:
+    candidate = raw.strip()
+    if not candidate:
+        raise ValueError("AI ranking response was empty")
+
+    fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", candidate, re.DOTALL)
+    if fence_match:
+        return fence_match.group(1).strip()
+
+    first_bracket = candidate.find("[")
+    last_bracket = candidate.rfind("]")
+    if first_bracket != -1 and last_bracket != -1 and first_bracket < last_bracket:
+        return candidate[first_bracket : last_bracket + 1].strip()
+
+    return candidate
+
+
+def _parse_ranked_topics(raw: str) -> list[dict]:
+    payload = _extract_json_payload(raw)
+    parsed = json.loads(payload)
+
+    if not isinstance(parsed, list):
+        raise ValueError("AI ranking response was not a JSON array")
+
+    validated: list[dict] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+
+        subject = item.get("subject")
+        brief = item.get("brief")
+        source = item.get("source")
+        if (
+            isinstance(subject, str)
+            and subject.strip()
+            and isinstance(brief, str)
+            and brief.strip()
+            and source in {"hackernews", "github"}
+        ):
+            validated.append(
+                {
+                    "subject": subject.strip(),
+                    "brief": brief.strip(),
+                    "source": source,
+                }
+            )
+
+    if not validated:
+        raise ValueError("AI ranking response had no valid topics")
+
+    return validated
+
+
+def _fallback_rank_items(items: list[dict]) -> list[dict]:
+    hn_items = [item for item in items if item.get("source") == "hackernews"]
+    gh_items = [item for item in items if item.get("source") == "github"]
+
+    hn_sorted = sorted(
+        hn_items,
+        key=lambda x: (int(x.get("points", 0)), int(x.get("num_comments", 0))),
+        reverse=True,
+    )
+    gh_sorted = sorted(
+        gh_items,
+        key=lambda x: len(str(x.get("description", ""))),
+        reverse=True,
+    )
+
+    selected = hn_sorted[:3] + gh_sorted[:2]
+    if not selected:
+        raise RuntimeError("No trending items available for fallback ranking")
+
+    ranked: list[dict] = []
+    for item in selected:
+        if item.get("source") == "hackernews":
+            title = str(item.get("title", "")).strip()
+            if not title:
+                continue
+            ranked.append(
+                {
+                    "subject": title,
+                    "brief": (
+                        "Explain why this topic is trending, break down the core technical "
+                        "ideas, and include practical takeaways for developers."
+                    ),
+                    "source": "hackernews",
+                }
+            )
+        else:
+            name = str(item.get("name", "")).strip()
+            description = str(item.get("description", "")).strip()
+            if not name:
+                continue
+            ranked.append(
+                {
+                    "subject": f"What developers can learn from {name}",
+                    "brief": (
+                        f"Analyze {name} and its engineering decisions. "
+                        f"Focus on implementation patterns and developer lessons. {description}".strip()
+                    ),
+                    "source": "github",
+                }
+            )
+
+    if not ranked:
+        raise RuntimeError("Fallback ranking produced no valid topics")
+
+    return ranked
 
 
 async def scrape_hackernews(limit: int = 30) -> list[dict]:
@@ -90,8 +201,12 @@ async def rank_and_save(items: list[dict], settings: Settings) -> list[TrendingT
         ],
     )
 
-    raw = message.content[0].text
-    ranked: list[dict] = json.loads(raw)
+    raw = message.content[0].text if message.content else ""
+    try:
+        ranked = _parse_ranked_topics(raw)
+    except (json.JSONDecodeError, ValueError, TypeError, AttributeError) as exc:
+        logger.warning("AI ranking parse failed (%s). Falling back to deterministic ranking.", exc)
+        ranked = _fallback_rank_items(items)
 
     topics: list[TrendingTopic] = []
     for item in ranked[:5]:
