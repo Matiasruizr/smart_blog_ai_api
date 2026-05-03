@@ -1,5 +1,9 @@
 # Smart Blog AI — FastAPI Backend
 
+Smart Blog AI is a personal blogging platform that writes itself. Every 48 hours it scrapes trending topics from Hacker News and GitHub, asks Claude to pick the most compelling ones and draft a brief for each, then emails you a list with one-click approval links. When you click approve, Claude writes the full post, fetches a relevant cover image, and saves it as a draft — ready to publish with a single button. Once published, the post is automatically shared to your LinkedIn profile and a notification email lands in your inbox. The whole cycle can also be triggered manually from the API whenever you want.
+
+Beyond the automation, the platform exposes a standard blog API (CRUD, pagination, soft-delete), a public profile endpoint for your portfolio frontend, and a full LinkedIn OAuth integration for connecting and syncing your professional data.
+
 > RESTful API powering the Smart Blog AI platform. Connects the Next.js frontend, MongoDB Atlas, the AI content automation engine, and LinkedIn sync.
 
 ![Python](https://img.shields.io/badge/Python-3.13-1E293B?style=flat-square) ![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square) ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-00684A?style=flat-square) ![Status](https://img.shields.io/badge/Status-v1.0--alpha-7C3AED?style=flat-square)
