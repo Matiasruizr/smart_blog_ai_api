@@ -228,7 +228,23 @@ All configuration is loaded from `.env` via Pydantic `BaseSettings`. Never commi
 | `LINKEDIN_REDIRECT_URI` | OAuth callback URL | `http://localhost:8000/api/v1/linkedin/callback` | No |
 | `LINKEDIN_SCOPE` | OAuth scopes | `r_liteprofile w_member_social` | No |
 
-### Email _(coming soon)_
+### Owner credentials
+
+| Variable | Description | Required |
+|---|---|---|
+| `OWNER_USERNAME` | Login username | No (default: `admin`) |
+| `OWNER_PASSWORD_HASH` | bcrypt hash of the owner password | **Yes** |
+
+Generate the hash before first run:
+
+```bash
+source .venv/bin/activate
+python -c "from app.core.security import hash_password; print(hash_password('yourpassword'))"
+```
+
+Paste the output into `OWNER_PASSWORD_HASH` in your `.env`.
+
+### Email
 
 | Variable | Description | Required |
 |---|---|---|
@@ -241,13 +257,12 @@ All configuration is loaded from `.env` via Pydantic `BaseSettings`. Never commi
 | `EMAIL_FROM` | Sender address | When email is enabled |
 | `EMAIL_TO_OWNER` | Owner's email for automation notifications | When email is enabled |
 
-### Automation Scheduler _(coming soon)_
+### Automation Scheduler
 
 | Variable | Description | Default |
 |---|---|---|
 | `SCHEDULER_ENABLED` | Enable the background scheduler | `true` |
 | `AUTOMATION_INTERVAL_HOURS` | Hours between automation runs | `48` |
-| `TRENDING_SOURCES` | Comma-separated: `hackernews,github` | `hackernews,github` |
 
 ---
 
@@ -255,13 +270,25 @@ All configuration is loaded from `.env` via Pydantic `BaseSettings`. Never commi
 
 All routes are prefixed with `/api/v1`. Protected routes require `Authorization: Bearer <token>`.
 
-### Authentication _(login endpoint coming soon)_
+### Authentication ✅
 
-JWT verification is implemented. The login endpoint will be added with the auth router.
+| Method | Endpoint | Description | Auth |
+|---|---|---|---|
+| `POST` | `/auth/login` | Obtain a JWT access token | No |
 
-| Method | Endpoint | Description | Auth | Status |
-|---|---|---|---|---|
-| `POST` | `/auth/login` | Obtain a JWT access token | No | 🔜 |
+**Login request** (form data — `Content-Type: application/x-www-form-urlencoded`):
+
+```
+username=admin&password=yourpassword
+```
+
+**Response:**
+
+```json
+{ "access_token": "eyJ...", "token_type": "bearer" }
+```
+
+Credentials are set via `OWNER_USERNAME` / `OWNER_PASSWORD_HASH` env vars. See [Environment Variables](#5-environment-variables) for how to generate the hash.
 
 ---
 
@@ -405,9 +432,10 @@ curl -X POST http://localhost:8000/api/v1/automation/generate \
 ## 8. Authentication & Security
 
 - All owner/admin endpoints require a **JWT Bearer token** in the `Authorization` header.
+- Tokens are obtained via `POST /api/v1/auth/login` (form data) using `OWNER_USERNAME` + `OWNER_PASSWORD_HASH`.
 - JWT signing uses `python-jose` HS256 with `SECRET_KEY`. Default expiry: 24h (`ACCESS_TOKEN_EXPIRE_MINUTES`).
-- Password hashing uses `passlib[bcrypt]`.
-- LinkedIn integration uses **OAuth 2.0 Authorization Code** — tokens stored in the `Profile` document (encrypted at the application level in production).
+- Password hashing uses `passlib[bcrypt]`. Generate the hash with `from app.core.security import hash_password; hash_password('yourpassword')`.
+- LinkedIn integration uses **OAuth 2.0 Authorization Code** — tokens stored in the `Profile` document.
 - Public endpoints (`GET /posts`, `GET /profile`) are intentionally unauthenticated for SEO and frontend use.
 
 ```
