@@ -1,4 +1,5 @@
 import json
+import re
 
 import anthropic
 import httpx
@@ -29,7 +30,17 @@ async def generate_post_content(subject: str, brief: str, settings: Settings) ->
             {"role": "user", "content": f"Subject: {subject}\n\nBrief: {brief}"},
         ],
     )
-    raw = message.content[0].text
+    raw = message.content[0].text if message.content else ""
+
+    # Strip markdown fences if present
+    fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", raw, re.DOTALL)
+    if fence_match:
+        raw = fence_match.group(1).strip()
+    else:
+        first, last = raw.find("{"), raw.rfind("}")
+        if first != -1 and last != -1:
+            raw = raw[first:last + 1]
+
     try:
         return json.loads(raw)
     except (json.JSONDecodeError, IndexError, AttributeError):
