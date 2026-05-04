@@ -1,6 +1,4 @@
-import json
 import logging
-import re
 
 import anthropic
 import httpx
@@ -14,13 +12,33 @@ _UNSPLASH_URL = "https://api.unsplash.com/photos/random"
 _PEXELS_URL = "https://api.pexels.com/v1/search"
 
 _SYSTEM_PROMPT = (
-    "You are a technical blogger. Given a subject and brief, generate a complete blog post. "
-    "Respond with ONLY a raw JSON object — no markdown fences, no explanation, no preamble. "
-    "The JSON must have exactly these fields: "
-    "title (string), excerpt (2-3 sentence summary string), "
-    "content (full Markdown post body string — escape all special characters properly), "
-    "cover_image_search_term (1-3 keywords string)."
+    "You are a software engineer with 10 years of experience writing your personal tech blog. "
+    "Write like a real practitioner: direct, opinionated, and grounded in real-world experience. "
+    "Avoid corporate fluff, buzzword overload, and listicle filler. "
+    "Use simple sentences, but don't dumb things down — assume the reader is a developer. "
+    "Share genuine insight: what actually works, what to watch out for, and why it matters in practice."
 )
+
+_BLOG_POST_TOOL = {
+    "name": "generate_blog_post",
+    "description": (
+        "Write a complete blog post on the given subject and brief. "
+        "Tone: natural and conversational, like a senior engineer sharing hard-won knowledge with peers — "
+        "not a textbook, not a marketing page. Language: simple but technically precise; no jargon for its own sake. "
+        "Structure: short intro that hooks the reader, clear sections with practical depth, honest conclusion. "
+        "The reader should finish feeling like they learned something real."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "Concise, specific title — no clickbait, no 'The Ultimate Guide to'"},
+            "excerpt": {"type": "string", "description": "2-3 sentences that tell the reader exactly what they'll learn and why it matters"},
+            "content": {"type": "string", "description": "Full post in Markdown. Natural flow, real examples, no filler sections. Write like you're explaining to a colleague over coffee."},
+            "cover_image_search_term": {"type": "string", "description": "1-3 keywords for cover image search"},
+        },
+        "required": ["title", "excerpt", "content", "cover_image_search_term"],
+    },
+}
 
 
 async def generate_post_content(subject: str, brief: str, settings: Settings) -> dict:
@@ -29,35 +47,23 @@ async def generate_post_content(subject: str, brief: str, settings: Settings) ->
         model=settings.ai_model,
         max_tokens=settings.ai_max_tokens,
         system=_SYSTEM_PROMPT,
+        tools=[_BLOG_POST_TOOL],
+        tool_choice={"type": "tool", "name": "generate_blog_post"},
         messages=[
             {"role": "user", "content": f"Subject: {subject}\n\nBrief: {brief}"},
         ],
     )
-    raw = message.content[0].text if message.content else ""
-    logger.info("Claude raw response (first 500): %r", raw[:500])
-    logger.info("Claude raw response (last 200): %r", raw[-200:])
-    logger.info("Stop reason: %s", message.stop_reason)
+    logger.info("Stop reason: %s | blocks: %d", message.stop_reason, len(message.content))
 
-    # Strip markdown fences if present
-    fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", raw, re.DOTALL)
-    if fence_match:
-        raw = fence_match.group(1).strip()
-        logger.info("Extracted from fence, length: %d", len(raw))
-    else:
-        first, last = raw.find("{"), raw.rfind("}")
-        if first != -1 and last != -1:
-            raw = raw[first:last + 1]
-        logger.info("Used brace extraction, length: %d", len(raw))
+    for block in message.content:
+        if block.type == "tool_use" and block.name == "generate_blog_post":
+            return block.input
 
-    try:
-        return json.loads(raw)
-    except (json.JSONDecodeError, IndexError, AttributeError) as exc:
-        logger.error("JSON parse failed: %s", exc)
-        logger.error("Attempted to parse: %r", raw[:300])
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="AI returned an invalid response — could not parse JSON",
-        )
+    logger.error("No tool_use block in response: %r", message.content)
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="AI returned an invalid response — no tool call found",
+    )
 
 
 async def fetch_cover_image(search_term: str, settings: Settings) -> str | None:
