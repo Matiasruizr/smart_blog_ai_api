@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class PostBase(BaseModel):
@@ -34,3 +34,15 @@ class PostResponse(PostBase):
     published_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def _coerce_id(cls, value: object) -> str:
+        return str(value)
+
+    @field_validator("topic_id", mode="before")
+    @classmethod
+    def _coerce_topic_id(cls, value: object) -> Optional[str]:
+        if value is None:
+            return None
+        return str(value)

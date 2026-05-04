@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+from beanie import PydanticObjectId
+
 from app.models.post import BlogPost
 from app.schemas.post import PostCreate, PostUpdate
 
@@ -41,8 +43,13 @@ async def get_by_slug(slug: str) -> BlogPost | None:
 
 
 async def get_by_id(post_id: str) -> BlogPost | None:
+    try:
+        object_id = PydanticObjectId(post_id)
+    except Exception:
+        return None
+
     return await BlogPost.find_one(
-        BlogPost.id == post_id,
+        BlogPost.id == object_id,
         BlogPost.is_deleted == False,
     )
 
