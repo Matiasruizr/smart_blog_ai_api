@@ -6,6 +6,18 @@ from app.models.post import BlogPost
 from app.schemas.post import PostCreate, PostUpdate
 
 
+async def get_published_categories() -> list[str]:
+    pipeline = [
+        {"$match": {"status": "published", "is_deleted": False}},
+        {"$project": {"first_tag": {"$arrayElemAt": ["$tags", 0]}}},
+        {"$match": {"first_tag": {"$ne": None}}},
+        {"$group": {"_id": "$first_tag"}},
+        {"$sort": {"_id": 1}},
+    ]
+    result = await BlogPost.aggregate(pipeline).to_list()
+    return [doc["_id"] for doc in result if doc.get("_id")]
+
+
 async def list_published(page: int, size: int) -> list[BlogPost]:
     skip = (page - 1) * size
     return (

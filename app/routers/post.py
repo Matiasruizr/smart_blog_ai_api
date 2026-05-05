@@ -25,6 +25,11 @@ async def list_drafts(
     return [PostResponse.model_validate(p) for p in posts]
 
 
+@router.get("/categories", response_model=list[str])
+async def list_categories() -> list[str]:
+    return await post_service.get_published_categories()
+
+
 @router.get("/{slug}", response_model=PostResponse)
 async def get_post(slug: str) -> PostResponse:
     post = await post_service.get_by_slug(slug)
